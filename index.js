@@ -46,6 +46,7 @@ async function run() {
 
     const jobCollection = client.db("sample_analytics").collection("cumuna_events");
     const teamCollection = client.db("sample_analytics").collection("team");
+    const eventCollection = client.db("sample_analytics").collection("events");
 
     // Define the /jobs route to fetch job data from MongoDB
     app.get('/blogs', async (_req, res) => {
