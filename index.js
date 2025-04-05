@@ -5,6 +5,7 @@ const cors = require('cors');
 const multer = require('multer');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express();
+const path = require('path');
 require('dotenv').config();
 
 const port = process.env.PORT || 5000;
@@ -24,6 +25,7 @@ const client = new MongoClient(uri, {
 });
 
 // Configure storage
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/');
@@ -33,6 +35,8 @@ const storage = multer.diskStorage({
   }
 });
 
+const upload = multer({ storage });
+
 
 async function run() {
   try {
@@ -41,6 +45,7 @@ async function run() {
     console.log("Successfully connected to MongoDB!");
 
     const jobCollection = client.db("sample_analytics").collection("cumuna_events");
+    const teamCollection = client.db("sample_analytics").collection("team");
 
     // Define the /jobs route to fetch job data from MongoDB
     app.get('/blogs', async (_req, res) => {
@@ -67,13 +72,86 @@ async function run() {
       res.send(result)
     });
 
-    app.delete('/blogs/:id', async(req,res)=>{
+    app.delete('/blogs/:id', async (req, res) => {
       const id = req.params.id;
-      const query = {_id: new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const result = await jobCollection.deleteOne(query);
       res.send(result);
-    })
+    });
 
+    app.get('/president', async (_req, res) => {
+      try {
+        const cursor = teamCollection.find();
+        const jobs = await cursor.toArray();
+        res.send(jobs);
+      } catch (err) {
+        console.error('Error fetching jobs:', err);
+        res.status(500).send('Error fetching jobs.');
+      }
+    });
+
+    app.get('/president/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await teamCollection.findOne(query);
+      res.send(result)
+    });
+
+    // Add this to your existing routes in index.js
+    app.post('/president', async (req, res) => {
+      try {
+        const newPresident = req.body;
+        const result = await teamCollection.insertOne(newPresident);
+        res.status(201).send({
+          success: true,
+          message: 'President added successfully',
+          insertedId: result.insertedId
+        });
+      } catch (err) {
+        console.error('Error adding president:', err);
+        res.status(500).send({
+          success: false,
+          message: 'Failed to add president'
+        });
+      }
+    });
+
+    app.delete('/president/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        
+        // First check if president exists
+        const existingPresident = await teamCollection.findOne(query);
+        if (!existingPresident) {
+          return res.status(404).send({
+            success: false,
+            message: 'President not found'
+          });
+        }
+    
+        // Delete the president
+        const result = await teamCollection.deleteOne(query);
+        
+        if (result.deletedCount === 1) {
+          res.send({
+            success: true,
+            message: 'President deleted successfully'
+          });
+        } else {
+          res.status(500).send({
+            success: false,
+            message: 'Failed to delete president'
+          });
+        }
+      } catch (err) {
+        console.error('Error deleting president:', err);
+        res.status(500).send({
+          success: false,
+          message: 'Error deleting president'
+        });
+      }
+    });
 
 
     // Keep the server running
