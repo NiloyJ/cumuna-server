@@ -10,8 +10,21 @@ require('dotenv').config();
 
 const port = process.env.PORT || 5000;
 
-app.use(cors());
-app.use(express.json());
+// app.use(cors());
+// app.use(express.json());
+
+// In your index.js (backend)
+const corsOptions = {
+  origin: [
+    'http://localhost:5173', // For local development
+    'https://random-portal.web.app/',
+    'https://cumuna-server-niloyj-niloyjs-projects.vercel.app/'
+    // , // Your Firebase Hosting URL// Alternate Firebase URL
+  ],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.mfznm9s.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -362,11 +375,11 @@ async function run() {
         if (!req.file) {
           return res.status(400).json({ message: 'No PDF file uploaded' });
         }
-    
+
         if (!req.body.category || !PDF_CATEGORIES.includes(req.body.category)) {
           return res.status(400).json({ message: 'Invalid or missing category' });
         }
-    
+
         const pdfData = {
           filename: req.file.originalname,
           path: req.file.path,
@@ -375,10 +388,10 @@ async function run() {
           category: req.body.category,
           uploadDate: new Date(),
         };
-    
+
         const result = await pdfCollection.insertOne(pdfData);
         pdfData._id = result.insertedId;
-    
+
         res.status(201).json(pdfData);
       } catch (err) {
         console.error('Error uploading PDF:', err);
@@ -390,17 +403,17 @@ async function run() {
       try {
         const { category } = req.query;
         const query = {};
-        
+
         if (category && PDF_CATEGORIES.includes(category)) {
           query.category = category;
         }
-    
+
         const pdfs = await pdfCollection.find(query, {
           projection: {
             path: 0 // Don't return the file path for security
           }
         }).sort({ uploadDate: -1 }).toArray();
-        
+
         res.json(pdfs);
       } catch (err) {
         console.error('Error fetching PDFs:', err);
