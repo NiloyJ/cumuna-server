@@ -848,6 +848,10 @@ async function run() {
       }
     });
 
+    app.get('/hello', (req, res) => {
+      res.send('Hello from the server!');
+    });
+
     // Keep the server running
     app.listen(port, () => {
       console.log(`Server is running on http://localhost:${port}`);
