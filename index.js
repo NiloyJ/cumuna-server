@@ -799,6 +799,55 @@ async function run() {
       }
     });
 
+    app.get('/about_stats/banner', async (req, res) => {
+      try {
+        const banner = await db.collection('about_stats').findOne({ type: 'home_banner' });
+        if (banner) {
+          res.send({ url: banner.url });
+        } else {
+          // Return default banner if none exists
+          res.send({ url: 'https://via.placeholder.com/800x200' });
+        }
+      } catch (err) {
+        console.error('Error fetching banner:', err);
+        res.status(500).send('Error fetching banner');
+      }
+    });
+
+    // Update banner URL
+    app.post('/about_stats/banner', async (req, res) => {
+      try {
+        const { url } = req.body;
+        if (!url) {
+          return res.status(400).send('URL is required');
+        }
+
+        // Upsert (update or insert) the banner
+        const result = await db.collection('about_stats').updateOne(
+          { type: 'home_banner' },
+          {
+            $set: {
+              url: url,
+              updatedAt: new Date(),
+              type: 'home_banner' // Ensure type is set for first insert
+            },
+            $setOnInsert: {
+              createdAt: new Date()
+            }
+          },
+          { upsert: true }
+        );
+
+        res.status(200).send({
+          message: 'Banner updated successfully',
+          url: url
+        });
+      } catch (err) {
+        console.error('Error updating banner:', err);
+        res.status(500).send('Failed to update banner');
+      }
+    });
+
     // Keep the server running
     app.listen(port, () => {
       console.log(`Server is running on http://localhost:${port}`);
