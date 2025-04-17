@@ -799,14 +799,20 @@ async function run() {
       }
     });
 
+    // Get current banner URL
+    // Get current banner URL
     app.get('/about_stats/banner', async (req, res) => {
       try {
-        const banner = await db.collection('about_stats').findOne({ type: 'home_banner' });
+        const banner = await aboutstatsCollection.findOne({});
         if (banner) {
-          res.send({ url: banner.url });
+          res.send(banner);
         } else {
           // Return default banner if none exists
-          res.send({ url: 'https://via.placeholder.com/800x200' });
+          res.send({
+            url: 'https://via.placeholder.com/800x200',
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
         }
       } catch (err) {
         console.error('Error fetching banner:', err);
@@ -814,7 +820,7 @@ async function run() {
       }
     });
 
-    // Update banner URL
+    // Update banner URL (deletes old one first)
     app.post('/about_stats/banner', async (req, res) => {
       try {
         const { url } = req.body;
@@ -822,25 +828,21 @@ async function run() {
           return res.status(400).send('URL is required');
         }
 
-        // Upsert (update or insert) the banner
-        const result = await db.collection('about_stats').updateOne(
-          { type: 'home_banner' },
-          {
-            $set: {
-              url: url,
-              updatedAt: new Date(),
-              type: 'home_banner' // Ensure type is set for first insert
-            },
-            $setOnInsert: {
-              createdAt: new Date()
-            }
-          },
-          { upsert: true }
-        );
+        // Delete any existing banner first
+        await aboutstatsCollection.deleteMany({});
 
-        res.status(200).send({
-          message: 'Banner updated successfully',
-          url: url
+        // Insert new banner
+        const newBanner = {
+          url: url,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        const result = await aboutstatsCollection.insertOne(newBanner);
+
+        res.send({
+          _id: result.insertedId,
+          ...newBanner
         });
       } catch (err) {
         console.error('Error updating banner:', err);
