@@ -5,26 +5,18 @@ const cors = require('cors');
 const multer = require('multer');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express();
+
 const path = require('path');
 require('dotenv').config();
 
 const port = process.env.PORT || 5000;
 
-// app.use(cors());
-// app.use(express.json());
+app.use(cors());
+app.use(express.json());
 
 // In your index.js (backend)
-const corsOptions = {
-  origin: [
-    'http://localhost:5173', // For local development
-    'https://random-portal.web.app/',
-    'https://cumuna-server-niloyj-niloyjs-projects.vercel.app/'
-    // , // Your Firebase Hosting URL// Alternate Firebase URL
-  ],
-  optionsSuccessStatus: 200
-};
 
-app.use(cors(corsOptions));
+
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.mfznm9s.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -73,6 +65,7 @@ async function run() {
     const teamCollection = client.db("sample_analytics").collection("team");
     const eventCollection = client.db("sample_analytics").collection("events");
     const aboutstatsCollection = client.db("sample_analytics").collection("aboutStats");
+    const pdfCollection = client.db("sample_analytics").collection("pdfs");
 
     // Define the /jobs route to fetch job data from MongoDB
     app.get('/blogs', async (_req, res) => {
@@ -268,213 +261,93 @@ async function run() {
       res.send(result);
     });
 
-    app.post('/api/upload-image', upload.single('image'), (req, res) => {
-      try {
-        if (!req.file) {
-          return res.status(400).json({ message: 'No file uploaded' });
-        }
 
-        // Return the file path relative to the public directory
-        const imageUrl = `/uploads/${req.file.filename}`;
-
-        res.json({
-          message: 'Image uploaded successfully',
-          imageUrl: imageUrl
-        });
-      } catch (error) {
-        console.error('Error uploading image:', error);
-        res.status(500).json({ message: 'Failed to upload image' });
-      }
-    });
 
     // Serve static files from uploads directory
     app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-    // PDF upload and save to MongoDB
-    // Add these near your other collection declarations
-    const pdfCollection = client.db("sample_analytics").collection("pdfs");
 
-    // Configure storage for PDFs
-    const pdfStorage = multer.diskStorage({
-      destination: (req, file, cb) => {
-        cb(null, 'uploads/pdfs/');
-      },
-      filename: (req, file, cb) => {
-        cb(null, Date.now() + '-' + file.originalname);
-      }
-    });
-
-    const pdfUpload = multer({
-      storage: pdfStorage,
-      fileFilter: (req, file, cb) => {
-        if (file.mimetype === 'application/pdf') {
-          cb(null, true);
-        } else {
-          cb(new Error('Only PDF files are allowed!'), false);
-        }
-      },
-      limits: {
-        fileSize: 10 * 1024 * 1024 // 10MB limit
-      }
-    });
-
-    // Ensure uploads directory exists
-    const fs = require('fs');
-    const uploadDir = 'uploads/pdfs';
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    // PDF Routes
-    // app.post('/api/pdfs', pdfUpload.single('pdf'), async (req, res) => {
-    //   try {
-    //     if (!req.file) {
-    //       return res.status(400).json({ message: 'No PDF file uploaded' });
-    //     }
-
-    //     const pdfData = {
-    //       filename: req.file.originalname,
-    //       path: req.file.path,
-    //       size: req.file.size,
-    //       mimetype: req.file.mimetype,
-    //       uploadDate: new Date(),
-    //     };
-
-    //     const result = await pdfCollection.insertOne(pdfData);
-    //     pdfData._id = result.insertedId;
-
-    //     res.status(201).json(pdfData);
-    //   } catch (err) {
-    //     console.error('Error uploading PDF:', err);
-    //     res.status(500).json({ message: err.message || 'Failed to upload PDF' });
-    //   }
-    // });
-
-
-
-    // app.get('/api/pdfs', async (req, res) => {
-    //   try {
-    //     const pdfs = await pdfCollection.find({}, {
-    //       projection: {
-    //         path: 0 // Don't return the file path for security
-    //       }
-    //     }).sort({ uploadDate: -1 }).toArray();
-    //     res.json(pdfs);
-    //   } catch (err) {
-    //     console.error('Error fetching PDFs:', err);
-    //     res.status(500).json({ message: 'Failed to fetch PDFs' });
-    //   }
-    // });
-
-    app.get('/api/pdfs/categories', (req, res) => {
-      res.json(PDF_CATEGORIES);
-    });
-
-    app.post('/api/pdfs', pdfUpload.single('pdf'), async (req, res) => {
+    // Get all resources
+    app.get('/api/resources', async (req, res) => {
       try {
-        if (!req.file) {
-          return res.status(400).json({ message: 'No PDF file uploaded' });
+        const resources = await pdfCollection.find().toArray();
+        res.json(resources);
+      } catch (err) {
+        console.error('Error fetching resources:', err);
+        res.status(500).json({ error: 'Failed to fetch resources' });
+      }
+    });
+
+    // Add new resource
+    app.post('/api/resources', async (req, res) => {
+      try {
+        const { link, title, type } = req.body;
+
+        if (!link || !title || !type) {
+          return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        if (!req.body.category || !PDF_CATEGORIES.includes(req.body.category)) {
-          return res.status(400).json({ message: 'Invalid or missing category' });
+        // Validate the type is one of our categories
+        if (!PDF_CATEGORIES.includes(type)) {
+          return res.status(400).json({ error: 'Invalid resource type' });
         }
 
-        const pdfData = {
-          filename: req.file.originalname,
-          path: req.file.path,
-          size: req.file.size,
-          mimetype: req.file.mimetype,
-          category: req.body.category,
-          uploadDate: new Date(),
+        const newResource = {
+          link,
+          title,
+          type,
+          createdAt: new Date(),
+          updatedAt: new Date()
         };
 
-        const result = await pdfCollection.insertOne(pdfData);
-        pdfData._id = result.insertedId;
-
-        res.status(201).json(pdfData);
-      } catch (err) {
-        console.error('Error uploading PDF:', err);
-        res.status(500).json({ message: err.message || 'Failed to upload PDF' });
-      }
-    });
-
-    app.get('/api/pdfs', async (req, res) => {
-      try {
-        const { category } = req.query;
-        const query = {};
-
-        if (category && PDF_CATEGORIES.includes(category)) {
-          query.category = category;
-        }
-
-        const pdfs = await pdfCollection.find(query, {
-          projection: {
-            path: 0 // Don't return the file path for security
-          }
-        }).sort({ uploadDate: -1 }).toArray();
-
-        res.json(pdfs);
-      } catch (err) {
-        console.error('Error fetching PDFs:', err);
-        res.status(500).json({ message: 'Failed to fetch PDFs' });
-      }
-    });
-
-    app.get('/api/pdfs/:id/view', async (req, res) => {
-      try {
-        const pdf = await pdfCollection.findOne({ _id: new ObjectId(req.params.id) });
-        if (!pdf) {
-          return res.status(404).json({ message: 'PDF not found' });
-        }
-
-        res.setHeader('Content-Type', pdf.mimetype);
-        res.sendFile(path.resolve(pdf.path));
-      } catch (err) {
-        console.error('Error viewing PDF:', err);
-        res.status(500).json({ message: 'Failed to view PDF' });
-      }
-    });
-
-    app.get('/api/pdfs/:id/download', async (req, res) => {
-      try {
-        const pdf = await pdfCollection.findOne({ _id: new ObjectId(req.params.id) });
-        if (!pdf) {
-          return res.status(404).json({ message: 'PDF not found' });
-        }
-
-        res.setHeader('Content-Type', pdf.mimetype);
-        res.setHeader('Content-Disposition', `attachment; filename="${pdf.filename}"`);
-        res.sendFile(path.resolve(pdf.path));
-      } catch (err) {
-        console.error('Error downloading PDF:', err);
-        res.status(500).json({ message: 'Failed to download PDF' });
-      }
-    });
-
-    app.delete('/api/pdfs/:id', async (req, res) => {
-      try {
-        const pdf = await pdfCollection.findOne({ _id: new ObjectId(req.params.id) });
-        if (!pdf) {
-          return res.status(404).json({ message: 'PDF not found' });
-        }
-
-        // Delete file from filesystem
-        fs.unlink(pdf.path, (err) => {
-          if (err) console.error('Error deleting PDF file:', err);
+        const result = await pdfCollection.insertOne(newResource);
+        res.status(201).json({
+          _id: result.insertedId,
+          ...newResource
         });
-
-        // Delete record from database
-        await pdfCollection.deleteOne({ _id: new ObjectId(req.params.id) });
-
-        res.json({ message: 'PDF deleted successfully' });
       } catch (err) {
-        console.error('Error deleting PDF:', err);
-        res.status(500).json({ message: 'Failed to delete PDF' });
+        console.error('Error adding resource:', err);
+        res.status(500).json({ error: 'Failed to add resource' });
       }
     });
 
-
+    // Delete resource
+    app.delete('/api/resources/:id', async (req, res) => {
+      try {
+          const { id } = req.params;
+          
+          // Validate ID format
+          if (!ObjectId.isValid(id)) {
+              return res.status(400).json({ 
+                  success: false,
+                  error: 'Invalid resource ID format' 
+              });
+          }
+          
+          const result = await pdfCollection.deleteOne({ 
+              _id: new ObjectId(id) 
+          });
+          
+          if (result.deletedCount === 0) {
+              return res.status(404).json({ 
+                  success: false,
+                  error: 'Resource not found or already deleted' 
+              });
+          }
+          
+          res.json({ 
+              success: true,
+              message: 'Resource deleted successfully' 
+          });
+      } catch (err) {
+          console.error('Error deleting resource:', err);
+          res.status(500).json({ 
+              success: false,
+              error: 'Failed to delete resource',
+              details: err.message 
+          });
+      }
+  });
 
     // Keep the server running
     app.listen(port, () => {
@@ -484,7 +357,8 @@ async function run() {
   } catch (err) {
     console.error('Error connecting to MongoDB:', err);
   }
-}
+};
+
 
 run().catch(console.dir);
 
