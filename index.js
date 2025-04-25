@@ -68,6 +68,7 @@ async function run() {
     const aboutstatsCollection = client.db("sample_analytics").collection("aboutStats");
     const pdfCollection = client.db("sample_analytics").collection("pdfs");
     const clubMembers = client.db("sample_analytics").collection("club_members");
+    const importantMembers = client.db("sample_analytics").collection("important_members");
 
     // Define the /jobs route to fetch job data from MongoDB
     app.get('/blogs', async (_req, res) => {
@@ -351,47 +352,96 @@ async function run() {
       }
     });
 
+
     app.get('/committee', async (req, res) => {
       try {
-        const committee = await clubMembers.find().toArray();
-        res.send(committee);
-      } catch (err) {
-        console.error('Error fetching committee:', err);
-        res.status(500).send('Error fetching committee members');
+        const members = await clubMembers.find().toArray();
+        res.status(200).json(members);
+      } catch (error) {
+        console.error("Error fetching committee members:", error);
+        res.status(500).json({ message: "Internal Server Error" });
       }
     });
+
 
     app.post('/committee', async (req, res) => {
       try {
+        const { name, designation, awards, imageUrl, message } = req.body;
+    
+        // Validate required fields
+        if (!name || !designation) {
+          return res.status(400).json({ message: "Name and designation are required" });
+        }
+    
+        // Validate designation is one of the allowed values
+        const allowedDesignations = [
+          'Advisor',
+          'Founders',
+          'Trustees',
+          'Previous_Governing_Board',
+          'Associate'
+        ];
+    
+        if (!allowedDesignations.includes(designation)) {
+          return res.status(400).json({ message: "Invalid designation value" });
+        }
+    
+        // Process awards - convert string to array if needed
+        let processedAwards = [];
+        if (awards) {
+          processedAwards = typeof awards === 'string' 
+            ? awards.split(',').map(award => award.trim()).filter(award => award)
+            : awards;
+        }
+    
+        // Create new member with BIO/message
         const newMember = {
-          ...req.body,
+          name,
+          designation,
+          awards: processedAwards,
+          imageUrl: imageUrl || '',
+          message: message || '', // Add the message field
           createdAt: new Date(),
           updatedAt: new Date()
         };
+    
         const result = await clubMembers.insertOne(newMember);
-        res.status(201).send({
+    
+        res.status(201).json({
           _id: result.insertedId,
           ...newMember
         });
-      } catch (err) {
-        console.error('Error adding committee member:', err);
-        res.status(500).send('Failed to add committee member');
+      } catch (error) {
+        console.error("Error creating committee member:", error);
+        res.status(500).json({ message: "Internal Server Error" });
       }
     });
 
+    // DELETE a committee member
     app.delete('/committee/:id', async (req, res) => {
       try {
-        const id = req.params.id;
+        const { id } = req.params;
+
         const result = await clubMembers.deleteOne({ _id: new ObjectId(id) });
 
-        if (result.deletedCount === 1) {
-          res.send({ success: true });
-        } else {
-          res.status(404).send('Member not found');
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ message: "Member not found" });
         }
-      } catch (err) {
-        console.error('Error deleting committee member:', err);
-        res.status(500).send('Error deleting committee member');
+
+        res.status(200).json({ message: "Member deleted successfully" });
+      } catch (error) {
+        console.error("Error deleting committee member:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+      }
+    });
+
+    app.get('/advisors', async (_req, res) => {
+      try {
+        const advisors = await clubMembers.find({ designation: "advisor" }).toArray();
+        res.status(200).json(advisors);
+      } catch (error) {
+        console.error("Error fetching advisors:", error);
+        res.status(500).json({ message: "Internal Server Error" });
       }
     });
 
@@ -415,30 +465,30 @@ async function run() {
         res.status(500).send('Error fetching banners');
       }
     });
-    
+
 
     // Update banner URL (deletes old one first)
     app.post('/about_stats/banners', async (req, res) => {
       try {
         const { banners } = req.body;
-    
+
         if (!Array.isArray(banners) || banners.length === 0) {
           return res.status(400).send('Banners array is required');
         }
-    
+
         const cleanedBanners = banners.map((banner, index) => ({
           url: banner.url,
           order: index + 1,
           createdAt: new Date(),
           updatedAt: new Date()
         }));
-    
+
         // Clear old banners
         await aboutstatsCollection.deleteMany({});
-    
+
         // Insert new ones
         const result = await aboutstatsCollection.insertMany(cleanedBanners);
-    
+
         res.send({
           success: true,
           insertedCount: result.insertedCount,
@@ -449,7 +499,7 @@ async function run() {
         res.status(500).send('Failed to update banners');
       }
     });
-    
+
 
     // app.get('/about_stats/banners', async (req, res) => {
     //   try {
