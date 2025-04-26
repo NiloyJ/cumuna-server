@@ -1,12 +1,10 @@
 
 
-
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express();
-
 const path = require('path');
 require('dotenv').config();
 
@@ -69,6 +67,7 @@ async function run() {
     const pdfCollection = client.db("sample_analytics").collection("pdfs");
     const clubMembers = client.db("sample_analytics").collection("club_members");
     const importantMembers = client.db("sample_analytics").collection("important_members");
+    const announcements = client.db("sample_analytics").collection("announcements");
 
     // Define the /jobs route to fetch job data from MongoDB
     app.get('/blogs', async (_req, res) => {
@@ -366,13 +365,13 @@ async function run() {
 
     app.post('/committee', async (req, res) => {
       try {
-        const { name, designation, awards, imageUrl, message } = req.body;
-    
+        const { name, designation, awards, imageUrl, message, email } = req.body;
+
         // Validate required fields
-        if (!name || !designation) {
-          return res.status(400).json({ message: "Name and designation are required" });
+        if (!name || !designation || !email) {
+          return res.status(400).json({ message: "Name, designation, and email are required" });
         }
-    
+
         // Validate designation is one of the allowed values
         const allowedDesignations = [
           'Advisor',
@@ -381,41 +380,36 @@ async function run() {
           'Previous_Governing_Board',
           'Associate'
         ];
-    
+
         if (!allowedDesignations.includes(designation)) {
           return res.status(400).json({ message: "Invalid designation value" });
         }
-    
+
         // Process awards - convert string to array if needed
         let processedAwards = [];
         if (awards) {
-          processedAwards = typeof awards === 'string' 
-            ? awards.split(',').map(award => award.trim()).filter(award => award)
-            : awards;
+          processedAwards = typeof awards === 'string' ? awards.split(',').map(a => a.trim()) : awards;
         }
-    
-        // Create new member with BIO/message
-        const newMember = {
+
+        // Save the committee member
+        const newMember = new CommitteeMember({
           name,
           designation,
           awards: processedAwards,
-          imageUrl: imageUrl || '',
-          message: message || '', // Add the message field
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
-    
-        const result = await clubMembers.insertOne(newMember);
-    
-        res.status(201).json({
-          _id: result.insertedId,
-          ...newMember
+          imageUrl,
+          message,
+          email
         });
+
+        await newMember.save();
+
+        res.status(201).json(newMember);
       } catch (error) {
-        console.error("Error creating committee member:", error);
-        res.status(500).json({ message: "Internal Server Error" });
+        res.status(500).json({ message: error.message });
       }
     });
+
+
 
     // DELETE a committee member
     app.delete('/committee/:id', async (req, res) => {
@@ -445,7 +439,73 @@ async function run() {
       }
     });
 
-    // Get current banner URL
+    app.get('/prevgovboard', async (_req, res) => {
+      try {
+        const advisors = await clubMembers.find({ designation: "Previous_Governing_Board" }).toArray();
+        res.status(200).json(advisors);
+      } catch (error) {
+        console.error("Error fetching advisors:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+      }
+    });
+
+      app.get('/announcements', async (_req, res) => {
+        try {
+          const cursor = announcements.find();
+          const all_annoucements = await cursor.toArray();
+          res.send(all_annoucements);
+        } catch (err) {
+          console.error('Error fetching jobs:', err);
+          res.status(500).send('Error fetching jobs.');
+        }
+      });
+
+
+    app.post('/announcements', async (req, res) => {
+      try {
+          const { title, message, author } = req.body;
+          
+          if (!title || !message) {
+              return res.status(400).json({ error: 'Title and message are required' });
+          }
+  
+          const newAnnouncement = {
+              title,
+              message,
+              author: author || 'Admin',
+              createdAt: new Date().toISOString()
+          };
+  
+          const result = await announcements.insertOne(newAnnouncement);
+          res.status(201).json({ 
+              _id: result.insertedId, 
+              ...newAnnouncement 
+          });
+      } catch (err) {
+          res.status(500).json({ error: 'Error creating announcement' });
+      }
+  });
+  
+
+    app.delete('/announcements/:id', async (req, res) => {
+      try {
+          const { id } = req.params;
+          if (!ObjectId.isValid(id)) {
+              return res.status(400).json({ error: 'Invalid announcement ID' });
+          }
+  
+          const result = await announcements.deleteOne({ _id: new ObjectId(id) });
+          if (result.deletedCount === 0) {
+              return res.status(404).json({ error: 'Announcement not found' });
+          }
+  
+          res.status(200).json({ message: 'Announcement deleted successfully' });
+      } catch (err) {
+          res.status(500).json({ error: 'Error deleting announcement' });
+      }
+  });
+  
+
 
     app.get('/about_stats/banners', async (req, res) => {
       try {
@@ -501,70 +561,6 @@ async function run() {
     });
 
 
-    // app.get('/about_stats/banners', async (req, res) => {
-    //   try {
-    //     const banners = await aboutstatsCollection.find({}).toArray();
-    //     if (banners && banners.length > 0) {
-    //       res.send(banners);
-    //     } else {
-    //       // Return default banners if none exist
-    //       res.send([
-    //         {
-    //           url: 'https://i.postimg.cc/PqQrYR6F/cumun-1.jpg',
-    //           order: 1,
-    //           createdAt: new Date(),
-    //           updatedAt: new Date()
-    //         },
-    //         {
-    //           url: 'https://via.placeholder.com/800x200?text=Banner+2',
-    //           order: 2,
-    //           createdAt: new Date(),
-    //           updatedAt: new Date()
-    //         },
-    //         {
-    //           url: 'https://via.placeholder.com/800x200?text=Banner+3',
-    //           order: 3,
-    //           createdAt: new Date(),
-    //           updatedAt: new Date()
-    //         }
-    //       ]);
-    //     }
-    //   } catch (err) {
-    //     console.error('Error fetching banners:', err);
-    //     res.status(500).send('Error fetching banners');
-    //   }
-    // });
-
-    // // Update banners
-    // app.post('/about_stats/banners', async (req, res) => {
-    //   try {
-    //     const { banners } = req.body;
-    //     if (!banners || !Array.isArray(banners)) {
-    //       return res.status(400).send('Banners array is required');
-    //     }
-
-    //     // Delete all existing banners first
-    //     await aboutstatsCollection.deleteMany({});
-
-    //     // Insert new banners with their order
-    //     const newBanners = banners.map((banner, index) => ({
-    //       url: banner.url,
-    //       order: index + 1,
-    //       createdAt: new Date(),
-    //       updatedAt: new Date()
-    //     }));
-
-    //     const result = await aboutstatsCollection.insertMany(newBanners);
-
-    //     res.send({
-    //       insertedCount: result.insertedCount,
-    //       banners: newBanners
-    //     });
-    //   } catch (err) {
-    //     console.error('Error updating banners:', err);
-    //     res.status(500).send('Failed to update banners');
-    //   }
-    // });
 
     app.get('/hello', (req, res) => {
       res.send('Hello from the server!');
