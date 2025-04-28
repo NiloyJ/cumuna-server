@@ -68,6 +68,8 @@ async function run() {
     const clubMembers = client.db("sample_analytics").collection("club_members");
     const importantMembers = client.db("sample_analytics").collection("important_members");
     const announcements = client.db("sample_analytics").collection("announcements");
+    const extraeventsCollection = client.db("sample_analytics").collection("extra_events");
+
 
     // Define the /jobs route to fetch job data from MongoDB
     app.get('/blogs', async (_req, res) => {
@@ -175,6 +177,90 @@ async function run() {
       }
     });
 
+    // Get all events
+    app.get('/extraevents', async (_req, res) => {
+      try {
+        const cursor = extraeventsCollection.find().sort({ createdAt: -1 });
+        const events = await cursor.toArray();
+        res.send(events);
+      } catch (err) {
+        console.error('Error fetching events:', err);
+        res.status(500).send('Error fetching events.');
+      }
+    });
+
+    // Get single event by ID
+    app.get('/extraevents/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await extraeventsCollection.findOne(query);
+
+        if (!result) {
+          return res.status(404).send('Event not found');
+        }
+
+        res.send(result);
+      } catch (err) {
+        console.error('Error fetching event:', err);
+        res.status(500).send('Error fetching event.');
+      }
+    });
+
+    // Create new event
+    app.post('/extraevents', async (req, res) => {
+      try {
+        const event = req.body;
+        event.createdAt = new Date().toISOString();
+
+        const result = await extraeventsCollection.insertOne(event);
+        res.status(201).send({
+          _id: result.insertedId,
+          ...event
+        });
+      } catch (err) {
+        console.error('Error creating event:', err);
+        res.status(500).send('Error creating event.');
+      }
+    });
+
+    app.delete('/extraevents/:id', async (req, res) => {
+      try {
+        // Verify authorization
+        const authHeader = req.headers['authorization'];
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+          return res.status(401).send('Unauthorized');
+        }
+
+        const id = req.params.id;
+
+        // Validate ID format
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send('Invalid event ID');
+        }
+
+        const query = { _id: new ObjectId(id) };
+
+        // Optional: Verify the event exists first
+        const eventExists = await extraeventsCollection.findOne(query);
+        if (!eventExists) {
+          return res.status(404).send('Event not found');
+        }
+
+        // Delete the event
+        const result = await extraeventsCollection.deleteOne(query);
+
+        if (result.deletedCount === 1) {
+          res.status(200).send({ message: 'Event deleted successfully' });
+        } else {
+          res.status(404).send('Event not found');
+        }
+      } catch (err) {
+        console.error('Error deleting event:', err);
+        res.status(500).send('Error deleting event.');
+      }
+    });
+
     app.post('/events', async (req, res) => {
       try {
         const newEvent = req.body;
@@ -262,6 +348,7 @@ async function run() {
       const result = await eventCollection.deleteOne(query);
       res.send(result);
     });
+
 
 
 
@@ -449,62 +536,62 @@ async function run() {
       }
     });
 
-      app.get('/announcements', async (_req, res) => {
-        try {
-          const cursor = announcements.find();
-          const all_annoucements = await cursor.toArray();
-          res.send(all_annoucements);
-        } catch (err) {
-          console.error('Error fetching jobs:', err);
-          res.status(500).send('Error fetching jobs.');
-        }
-      });
+    app.get('/announcements', async (_req, res) => {
+      try {
+        const cursor = announcements.find();
+        const all_annoucements = await cursor.toArray();
+        res.send(all_annoucements);
+      } catch (err) {
+        console.error('Error fetching jobs:', err);
+        res.status(500).send('Error fetching jobs.');
+      }
+    });
 
 
     app.post('/announcements', async (req, res) => {
       try {
-          const { title, message, author } = req.body;
-          
-          if (!title || !message) {
-              return res.status(400).json({ error: 'Title and message are required' });
-          }
-  
-          const newAnnouncement = {
-              title,
-              message,
-              author: author || 'Admin',
-              createdAt: new Date().toISOString()
-          };
-  
-          const result = await announcements.insertOne(newAnnouncement);
-          res.status(201).json({ 
-              _id: result.insertedId, 
-              ...newAnnouncement 
-          });
+        const { title, message, author } = req.body;
+
+        if (!title || !message) {
+          return res.status(400).json({ error: 'Title and message are required' });
+        }
+
+        const newAnnouncement = {
+          title,
+          message,
+          author: author || 'Admin',
+          createdAt: new Date().toISOString()
+        };
+
+        const result = await announcements.insertOne(newAnnouncement);
+        res.status(201).json({
+          _id: result.insertedId,
+          ...newAnnouncement
+        });
       } catch (err) {
-          res.status(500).json({ error: 'Error creating announcement' });
+        res.status(500).json({ error: 'Error creating announcement' });
       }
-  });
-  
+    });
+
 
     app.delete('/announcements/:id', async (req, res) => {
       try {
-          const { id } = req.params;
-          if (!ObjectId.isValid(id)) {
-              return res.status(400).json({ error: 'Invalid announcement ID' });
-          }
-  
-          const result = await announcements.deleteOne({ _id: new ObjectId(id) });
-          if (result.deletedCount === 0) {
-              return res.status(404).json({ error: 'Announcement not found' });
-          }
-  
-          res.status(200).json({ message: 'Announcement deleted successfully' });
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ error: 'Invalid announcement ID' });
+        }
+
+        const result = await announcements.deleteOne({ _id: new ObjectId(id) });
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ error: 'Announcement not found' });
+        }
+
+        res.status(200).json({ message: 'Announcement deleted successfully' });
       } catch (err) {
-          res.status(500).json({ error: 'Error deleting announcement' });
+        res.status(500).json({ error: 'Error deleting announcement' });
       }
-  });
-  
+    });
+
 
 
     app.get('/about_stats/banners', async (req, res) => {
