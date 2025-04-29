@@ -1,4 +1,4 @@
-const express = require('express');
+const express = require ('express');
 const cors = require('cors');
 const multer = require('multer');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -90,6 +90,27 @@ async function run() {
     });
     
     // POST new committee member
+    // app.post('/committee', async (req, res) => {
+    //   try {
+    //     const newMember = req.body;
+    //     // Validation
+    //     if (!newMember.name || !newMember.designation || !newMember.profileUrl) {
+    //       return res.status(400).send('Name, designation and profile URL are required');
+    //     }
+        
+    //     // If advisor, require message
+    //     if (newMember.designation === 'Advisor' && !newMember.advisorMessage) {
+    //       return res.status(400).send('Advisor message is required for Advisors');
+    //     }
+        
+    //     const result = await clubMembers .insertOne(newMember);
+    //     res.status(201).send(result);
+    //   } catch (err) {
+    //     console.error('Error adding member:', err);
+    //     res.status(500).send('Error adding member.');
+    //   }
+    // });
+
     app.post('/committee', async (req, res) => {
       try {
         const newMember = req.body;
@@ -98,12 +119,17 @@ async function run() {
           return res.status(400).send('Name, designation and profile URL are required');
         }
         
-        // If advisor, require message
-        if (newMember.designation === 'Advisor' && !newMember.advisorMessage) {
-          return res.status(400).send('Advisor message is required for Advisors');
+        // If advisor, require message and worksAt
+        if (newMember.designation === 'Advisor') {
+          if (!newMember.advisorMessage) {
+            return res.status(400).send('Advisor message is required for Advisors');
+          }
+          if (!newMember.worksAt) {
+            return res.status(400).send('Works at information is required for Advisors');
+          }
         }
         
-        const result = await clubMembers .insertOne(newMember);
+        const result = await clubMembers.insertOne(newMember);
         res.status(201).send(result);
       } catch (err) {
         console.error('Error adding member:', err);
